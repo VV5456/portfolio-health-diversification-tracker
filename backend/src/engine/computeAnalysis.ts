@@ -1,6 +1,8 @@
 import { HoldingsRepository } from '../db/holdingsRepository.js';
 import { TargetsRepository } from '../db/targetsRepository.js';
 import { normalizeCategory } from '../config/sectorLookup.js';
+import { LLMService } from '../services/llmService.js';
+import { generateFallbackSummary } from '../services/llmFallback.js';
 import {
   Holding,
   TargetAllocation,
@@ -24,13 +26,14 @@ export async function computeAnalysis(
   userId: string,
   holdingsRepo: HoldingsRepository = new HoldingsRepository(),
   targetsRepo: TargetsRepository = new TargetsRepository(),
-  priceFetcher?: PriceFetcher
+  priceFetcher?: PriceFetcher,
+  llmService?: LLMService
 ): Promise<PortfolioAnalysis> {
   const rawHoldings = await holdingsRepo.getHoldings(userId);
   const rawTargets = await targetsRepo.getTargets(userId);
 
   if (!rawHoldings || rawHoldings.length === 0) {
-    return {
+    const emptyAnalysis: Partial<PortfolioAnalysis> = {
       totalValue: 0,
       totalInvested: 0,
       totalGainLoss: 0,
@@ -49,8 +52,16 @@ export async function computeAnalysis(
         targetPercent: t.targetPercent,
         actualPercent: 0,
         driftPercent: round(0 - t.targetPercent, 2)
-      })),
-      aiSummary: 'Your portfolio is currently empty. Add holdings to calculate valuation, sector weights, concentration risk, and target drift.'
+      }))
+    };
+
+    const aiSummary = llmService
+      ? await llmService.generateExplanation(emptyAnalysis)
+      : generateFallbackSummary(emptyAnalysis);
+
+    return {
+      ...(emptyAnalysis as PortfolioAnalysis),
+      aiSummary
     };
   }
 
@@ -108,50 +119,54 @@ export async function computeAnalysis(
 
   const totalValue = round(unroundedTotalValue, 2);
   const totalInvested = round(unroundedTotalInvested, 2);
-  const totalGainLoss = round(unroundedTotalValue - unroundedTotalInvested, 2);
-  const gainLossPercent = unroundedTotalInvested > 0
-    ? round(((unroundedTotalValue - unroundedTotalInvested) / unroundedTotalInvested) * 100, 2)
-    : 0;
+  const totalGainLoss = round(totalValue - totalInvested, 2);
+  const gainLossPercent = totalInvested > 0 ? round((totalGainLoss / totalInvested) * 100, 2) : 0;
 
-  // 2. Calculate weightPercent per holding & build CalculatedHolding array
+  // 2. Calculate holding weight percentages and build calculated holdings list
   const calculatedHoldings: CalculatedHolding[] = intermediateHoldings.map((item) => {
-    const unroundedWeight = unroundedTotalValue > 0 ? (item.currentValue / unroundedTotalValue) * 100 : 0;
+    const weightPercent = totalValue > 0 ? round((item.currentValue / totalValue) * 100, 2) : 0;
+
     return {
-      ...item.holding,
+      userId: item.holding.userId,
+      stockSymbol: item.holding.stockSymbol,
+      quantity: item.holding.quantity,
+      avgBuyPrice: item.holding.avgBuyPrice,
+      sector: normalizeCategory(item.holding.sector),
       currentPrice: round(item.currentPrice, 2),
       investedValue: round(item.investedValue, 2),
       currentValue: round(item.currentValue, 2),
       gainLoss: round(item.gainLoss, 2),
       gainLossPercent: round(item.gainLossPercent, 2),
-      weightPercent: round(unroundedWeight, 2),
-      isPriceCached: item.isPriceCached
+      weightPercent,
+      isPriceCached: item.isPriceCached,
+      addedAt: item.holding.addedAt,
+      updatedAt: item.holding.updatedAt
     };
   });
 
-  // 3. Sector Breakdown
+  // 3. Sector Breakdown calculation
   const sectorValueMap: Record<string, number> = {};
-
   for (const item of intermediateHoldings) {
-    const sector = normalizeCategory(item.holding.sector || 'Other');
+    const sector = normalizeCategory(item.holding.sector);
     sectorValueMap[sector] = (sectorValueMap[sector] || 0) + item.currentValue;
   }
 
   const sectorBreakdown: Record<string, number> = {};
-  for (const [sector, value] of Object.entries(sectorValueMap)) {
-    sectorBreakdown[sector] = unroundedTotalValue > 0 ? round((value / unroundedTotalValue) * 100, 2) : 0;
+  for (const [sec, val] of Object.entries(sectorValueMap)) {
+    sectorBreakdown[sec] = totalValue > 0 ? round((val / totalValue) * 100, 2) : 0;
   }
 
-  // 4. Concentration Risk (Strict spec compliance: top3Percent > 60 -> high, top3Percent > 40 -> moderate, else low)
-  const sortedByValue = [...calculatedHoldings].sort((a, b) => b.currentValue - a.currentValue);
-  const top1Holding = sortedByValue[0] || null;
-  const top1Percent = top1Holding ? top1Holding.weightPercent : 0;
-  const top1Symbol = top1Holding ? top1Holding.stockSymbol : null;
+  // 4. Concentration analysis
+  const sortedWeights = [...calculatedHoldings].sort((a, b) => b.weightPercent - a.weightPercent);
+  const top1Percent = sortedWeights.length > 0 ? sortedWeights[0].weightPercent : 0;
+  const top1Symbol = sortedWeights.length > 0 ? sortedWeights[0].stockSymbol : null;
+  const top3Percent = round(
+    sortedWeights.slice(0, 3).reduce((sum, h) => sum + h.weightPercent, 0),
+    2
+  );
 
-  const top3ValueSum = sortedByValue.slice(0, 3).reduce((acc, h) => acc + h.currentValue, 0);
-  const top3Percent = unroundedTotalValue > 0 ? round((top3ValueSum / unroundedTotalValue) * 100, 2) : 0;
-
-  let flag: 'high' | 'moderate' | 'low' = 'low';
-  let flagReason = 'Portfolio concentration is balanced across holdings.';
+  let flag: 'low' | 'moderate' | 'high' = 'low';
+  let flagReason = 'Portfolio concentration is well balanced.';
 
   if (top3Percent > 60) {
     flag = 'high';
@@ -169,7 +184,7 @@ export async function computeAnalysis(
     flagReason
   };
 
-  // 5. Target Drift (Strict spec compliance: calculated strictly for each configured target)
+  // 5. Target Drift
   const targetDrift: TargetDriftItem[] = (rawTargets || []).map((t) => {
     const category = normalizeCategory(t.category);
     const targetPercent = t.targetPercent;
@@ -184,6 +199,21 @@ export async function computeAnalysis(
     };
   });
 
+  const partialAnalysis: Partial<PortfolioAnalysis> = {
+    totalValue,
+    totalInvested,
+    totalGainLoss,
+    gainLossPercent,
+    holdings: calculatedHoldings,
+    sectorBreakdown,
+    concentration,
+    targetDrift
+  };
+
+  const aiSummary = llmService
+    ? await llmService.generateExplanation(partialAnalysis)
+    : generateFallbackSummary(partialAnalysis);
+
   return {
     totalValue,
     totalInvested,
@@ -193,6 +223,6 @@ export async function computeAnalysis(
     sectorBreakdown,
     concentration,
     targetDrift,
-    aiSummary: 'Portfolio analysis engine executed successfully.'
+    aiSummary
   };
 }

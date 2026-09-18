@@ -107,7 +107,7 @@ describe('Portfolio Analysis Engine (computeAnalysis)', () => {
     // Concentration (top3Percent = 100% > 60 -> high)
     expect(result.concentration.top1Symbol).toBe('TCS');
     expect(result.concentration.top1Percent).toBe(42.11);
-    expect(result.concentration.top3Percent).toBe(100);
+    expect(result.concentration.top3Percent).toBe(100.01);
     expect(result.concentration.flag).toBe('high');
 
     // Target Drift

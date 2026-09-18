@@ -131,8 +131,8 @@ bharatbuildsaws/
 ---
 
 ### TASK 8 — LLM Explanation Layer
-* **Goal:** Implement `llmService.ts` with Gemini (Dev) and Bedrock (Prod) adapters, strict system prompt, 2–4 sentence constraint, and defensive keyword validation fallback.
-* **Verification:** Write unit tests for valid LLM response, banned keyword detection (triggering safe fallback), and error handling.
+* **Goal:** Implement `llmService.ts` with `GeminiAdapter` (`@google/genai` SDK for local dev/test) and `BedrockAdapter` (`@aws-sdk/client-bedrock-runtime` via `ConverseCommand` for AWS prod), strict system prompt guardrails, 2–4 sentence constraint, defensive keyword validation (`llmValidator.ts`), and safe deterministic fallback (`llmFallback.ts`).
+* **Verification:** Write unit tests for valid LLM response, banned keyword detection, empty/malformed output rejection, 2–4 sentence length checks, provider selection (`LLM_PROVIDER=gemini|bedrock`), provider failure fallback, and complete numerical analysis preservation during LLM failure.
 
 ---
 

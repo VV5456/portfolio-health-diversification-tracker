@@ -22,10 +22,10 @@
 ---
 
 ### ADR-3: Dual LLM Provider Architecture (Gemini Dev / Bedrock Production)
-* **Status:** Specification Mandated
-* **Context:** Development environment uses Google Gemini via API key; AWS production environment uses Amazon Bedrock. Prompt structure and defensive validation must be identical across both environments.
-* **Decision:** Implement an `LLMService` interface with `GeminiAdapter` and `BedrockAdapter` implementations selected via `LLM_PROVIDER` environment variable. System prompts, input payload formats, and defensive keyword validation remain identical across both adapters.
-* **Impact:** Zero code drift when transitioning from local Gemini prototyping to production Amazon Bedrock deployment.
+* **Status:** Implemented Decision (TASK 8)
+* **Context:** Development environment uses Google Gemini via `@google/genai` SDK (`gemini-2.5-flash`); AWS production environment uses Amazon Bedrock (`@aws-sdk/client-bedrock-runtime` via `ConverseCommand` targeting `anthropic.claude-3-haiku-20240307-v1:0`). Prompt structure and defensive validation must be identical across both environments.
+* **Decision:** Implement an `LLMProvider` interface with `GeminiAdapter` (`backend/src/services/llm/geminiAdapter.ts`) and `BedrockAdapter` (`backend/src/services/llm/bedrockAdapter.ts`) selected via `LLM_PROVIDER=gemini|bedrock` environment variable. All LLM responses pass through defensive keyword validation (`llmValidator.ts`) and sentence count bounds checks (2–4 sentences), falling back to safe deterministic summary templates (`llmFallback.ts`) if validation fails or API errors occur.
+* **Impact:** Zero code drift when transitioning from local Gemini prototyping to production Amazon Bedrock deployment. Absolute protection against non-compliant investment advice or unhandled model failures.
 
 ---
 

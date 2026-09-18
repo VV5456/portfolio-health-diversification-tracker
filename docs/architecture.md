@@ -117,8 +117,8 @@ flowchart TD
 * **Role:** Isolated provider module generating factual 2–4 sentence plain-language summaries.
 * **Responsibilities:**
   * System Prompt Enforcement: Strict guardrails prohibiting buy/sell recommendations, investment advice, or invented statistics.
-  * Multi-provider Adapter: Uniform interface supporting **Google Gemini API** (for local development & testing) and **Amazon Bedrock** (for AWS production).
-  * Defensive Validation: Post-generation keyword check scanning for banned terms (`buy`, `sell`, `recommend`, etc.) and substituting a deterministic fallback template if triggered.
+  * Multi-provider Adapter: Uniform `LLMProvider` interface supporting **Google Gemini API** (`@google/genai` SDK for local development & testing) and **Amazon Bedrock** (`@aws-sdk/client-bedrock-runtime` using `ConverseCommand` for AWS production).
+  * Defensive Validation: Post-generation keyword check (`llmValidator.ts`) scanning for banned terms (`buy`, `sell`, `hold`, `recommend`, `should invest`, etc.) and enforcing 2–4 sentence bounds, substituting a deterministic fallback template (`llmFallback.ts`) if triggered.
 
 ### 3.7 Notification Layer (SNS / SES)
 * **Role:** Dispatches periodic weekly digest summary to user via Email (SES) or SMS (SNS).

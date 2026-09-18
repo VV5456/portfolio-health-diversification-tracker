@@ -6,6 +6,7 @@ import {
   MarketDataError,
   createProductionPriceFetcher
 } from '../services/marketDataService.js';
+import { LLMService } from '../services/llmService.js';
 import { computeAnalysis, PriceFetcher } from '../engine/computeAnalysis.js';
 
 const DEFAULT_USER_ID = 'default-user';
@@ -15,12 +16,14 @@ export interface GetAnalysisDependencies {
   targetsRepo?: TargetsRepository;
   marketDataService?: MarketDataService;
   priceFetcher?: PriceFetcher;
+  llmService?: LLMService;
 }
 
 export const createGetAnalysisHandler = (deps?: GetAnalysisDependencies) => {
   const holdingsRepo = deps?.holdingsRepo || new HoldingsRepository();
   const targetsRepo = deps?.targetsRepo || new TargetsRepository();
   const marketDataService = deps?.marketDataService || new MarketDataService();
+  const llmService = deps?.llmService || new LLMService();
 
   const priceFetcher =
     deps?.priceFetcher || createProductionPriceFetcher(marketDataService, holdingsRepo, DEFAULT_USER_ID);
@@ -31,7 +34,8 @@ export const createGetAnalysisHandler = (deps?: GetAnalysisDependencies) => {
         DEFAULT_USER_ID,
         holdingsRepo,
         targetsRepo,
-        priceFetcher
+        priceFetcher,
+        llmService
       );
 
       return {
