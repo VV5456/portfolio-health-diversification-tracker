@@ -1,11 +1,72 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { computeAnalysis } from '../engine/computeAnalysis.js';
+import { HoldingsRepository } from '../db/holdingsRepository.js';
+import { TargetsRepository } from '../db/targetsRepository.js';
+import {
+  MarketDataService,
+  MarketDataError,
+  createProductionPriceFetcher
+} from '../services/marketDataService.js';
+import { computeAnalysis, PriceFetcher } from '../engine/computeAnalysis.js';
 
-export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const analysis = await computeAnalysis('default-user');
-  return {
-    statusCode: 200,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(analysis)
+const DEFAULT_USER_ID = 'default-user';
+
+export interface GetAnalysisDependencies {
+  holdingsRepo?: HoldingsRepository;
+  targetsRepo?: TargetsRepository;
+  marketDataService?: MarketDataService;
+  priceFetcher?: PriceFetcher;
+}
+
+export const createGetAnalysisHandler = (deps?: GetAnalysisDependencies) => {
+  const holdingsRepo = deps?.holdingsRepo || new HoldingsRepository();
+  const targetsRepo = deps?.targetsRepo || new TargetsRepository();
+  const marketDataService = deps?.marketDataService || new MarketDataService();
+
+  const priceFetcher =
+    deps?.priceFetcher || createProductionPriceFetcher(marketDataService, holdingsRepo, DEFAULT_USER_ID);
+
+  return async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+    try {
+      const analysis = await computeAnalysis(
+        DEFAULT_USER_ID,
+        holdingsRepo,
+        targetsRepo,
+        priceFetcher
+      );
+
+      return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(analysis)
+      };
+    } catch (error) {
+      console.error('Error computing portfolio analysis:', error);
+
+      if (error instanceof MarketDataError) {
+        return {
+          statusCode: 502,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            error: {
+              code: error.code || 'PRICE_UNAVAILABLE',
+              message: error.message
+            }
+          })
+        };
+      }
+
+      return {
+        statusCode: 500,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          error: {
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'An internal error occurred while computing portfolio analysis.'
+          }
+        })
+      };
+    }
   };
 };
+
+export const handler = createGetAnalysisHandler();

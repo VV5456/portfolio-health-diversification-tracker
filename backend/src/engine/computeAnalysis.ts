@@ -78,8 +78,12 @@ export async function computeAnalysis(
         currentPrice = fetched.price;
         isPriceCached = fetched.isCached;
       } catch (err) {
-        currentPrice = h.lastKnownPrice || 0;
-        isPriceCached = true;
+        if (typeof h.lastKnownPrice === 'number' && h.lastKnownPrice > 0) {
+          currentPrice = h.lastKnownPrice;
+          isPriceCached = true;
+        } else {
+          throw err;
+        }
       }
     }
 
