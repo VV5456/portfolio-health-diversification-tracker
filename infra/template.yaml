@@ -1,0 +1,200 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Portfolio Health & Diversification Tracker - AWS SAM Infrastructure Specification
+
+Globals:
+  Function:
+    Timeout: 15
+    MemorySize: 256
+    Runtime: nodejs20.x
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        HOLDINGS_TABLE: !Ref HoldingsTable
+        TARGETS_TABLE: !Ref TargetAllocationTable
+        LLM_PROVIDER: bedrock
+        NODE_OPTIONS: --enable-source-maps
+
+Resources:
+  # ============================================================================
+  # DynamoDB Tables
+  # ============================================================================
+  HoldingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: PortfolioHoldings
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: stockSymbol
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: stockSymbol
+          KeyType: RANGE
+
+  TargetAllocationTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: PortfolioTargetAllocation
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: category
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: category
+          KeyType: RANGE
+
+  # ============================================================================
+  # API Gateway (HTTP API)
+  # ============================================================================
+  PortfolioTrackerApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: Prod
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowHeaders:
+          - "Content-Type"
+          - "Authorization"
+        AllowMethods:
+          - "GET"
+          - "POST"
+          - "DELETE"
+          - "OPTIONS"
+
+  # ============================================================================
+  # Lambda Functions
+  # ============================================================================
+  SaveHoldingsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: dist/handlers/saveHoldings.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref HoldingsTable
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /holdings
+            Method: POST
+            ApiId: !Ref PortfolioTrackerApi
+
+  GetHoldingsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: dist/handlers/getHoldings.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref HoldingsTable
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /holdings
+            Method: GET
+            ApiId: !Ref PortfolioTrackerApi
+
+  DeleteHoldingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: dist/handlers/deleteHolding.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref HoldingsTable
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /holdings/{stockSymbol}
+            Method: DELETE
+            ApiId: !Ref PortfolioTrackerApi
+
+  SaveTargetsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: dist/handlers/saveTargets.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TargetAllocationTable
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /targets
+            Method: POST
+            ApiId: !Ref PortfolioTrackerApi
+
+  GetTargetsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: dist/handlers/getTargets.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TargetAllocationTable
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /targets
+            Method: GET
+            ApiId: !Ref PortfolioTrackerApi
+
+  GetAnalysisFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: dist/handlers/getAnalysis.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref HoldingsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref TargetAllocationTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: "*"
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /analysis
+            Method: GET
+            ApiId: !Ref PortfolioTrackerApi
+
+  ScheduledAnalyzerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: dist/handlers/scheduledAnalyzer.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref HoldingsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref TargetAllocationTable
+      Events:
+        WeeklyCron:
+          Type: Schedule
+          Properties:
+            Schedule: rate(7 days)
+
+Outputs:
+  ApiEndpoint:
+    Description: HTTP API Gateway endpoint URL
+    Value: !Sub "https://${PortfolioTrackerApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"

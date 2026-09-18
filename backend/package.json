@@ -1,0 +1,23 @@
+{
+  "name": "portfolio-tracker-backend",
+  "version": "0.1.0",
+  "description": "Backend services and serverless handlers for Portfolio Health Tracker",
+  "main": "dist/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.650.0",
+    "@aws-sdk/client-dynamodb": "^3.650.0",
+    "@aws-sdk/lib-dynamodb": "^3.650.0",
+    "@google/generative-ai": "^0.19.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^20.16.5",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}

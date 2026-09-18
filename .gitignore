@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build and Compilation Artifacts
+dist/
+build/
+.vite/
+.aws-sam/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+!.env.example
+
+# Editor and IDE directories
+.vscode/
+.idea/
+*.swp
+*.swo
+*.user
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and temporary files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+tmp/
