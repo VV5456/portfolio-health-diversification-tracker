@@ -4,6 +4,7 @@ import {
   QueryCommand,
   GetCommand,
   PutCommand,
+  UpdateCommand,
   DeleteCommand
 } from '@aws-sdk/lib-dynamodb';
 import { Holding } from '../types/index.js';
@@ -56,6 +57,29 @@ export class HoldingsRepository {
 
     await this.docClient.send(command);
     return holding;
+  }
+
+  async updatePriceCache(
+    userId: string,
+    stockSymbol: string,
+    lastKnownPrice: number,
+    lastFetchedAt: string
+  ): Promise<void> {
+    const command = new UpdateCommand({
+      TableName: this.tableName,
+      Key: {
+        userId,
+        stockSymbol
+      },
+      UpdateExpression: 'SET lastKnownPrice = :price, lastFetchedAt = :fetchedAt, updatedAt = :updatedAt',
+      ExpressionAttributeValues: {
+        ':price': lastKnownPrice,
+        ':fetchedAt': lastFetchedAt,
+        ':updatedAt': new Date().toISOString()
+      }
+    });
+
+    await this.docClient.send(command);
   }
 
   async deleteHolding(userId: string, stockSymbol: string): Promise<boolean> {

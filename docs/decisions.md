@@ -30,10 +30,14 @@
 ---
 
 ### ADR-4: Price Provider Isolation & Fallback Caching Strategy
-* **Status:** Specification Mandated
-* **Context:** External free stock market data APIs (e.g. Yahoo Finance wrappers for NSE/BSE) may experience transient failures, network latency, or rate limits.
-* **Decision:** Encapsulate market data fetching within `marketDataService.ts`. On API failure, retrieve `lastKnownPrice` and `lastFetchedAt` from the DynamoDB `Holdings` item, set `isPriceCached = true`, and log a warning without throwing a 500 error. On success, update `lastKnownPrice` and `lastFetchedAt` in DynamoDB.
-* **Impact:** Dashboard remains 100% operational even during third-party price provider outages.
+* **Status:** Implemented Decision (TASK 6)
+* **Context:** External free stock market data APIs (e.g. Yahoo Finance wrappers for Indian NSE/BSE equities) may experience transient failures, network latency, or rate limits.
+* **Decision:** Encapsulate market data fetching within `MarketDataService` (`backend/src/services/marketDataService.ts`).
+  * **Provider Selected:** Yahoo Finance v8 Chart API (`https://query1.finance.yahoo.com/v8/finance/chart/{symbol}`).
+  * **Symbol Format:** Indian equities map to exchange symbols with `.NS` suffix (e.g., `TCS.NS`, `HDFCBANK.NS`, `RELIANCE.NS`). Tickers with existing exchange suffixes (e.g., `.BO`) are preserved as-is.
+  * **Headers:** Requests set a standard `User-Agent` header to prevent HTTP 403 blocks.
+  * **Cache & Fallback Behavior:** On API failure, retrieve `lastKnownPrice` and `lastFetchedAt` from the DynamoDB `Holdings` item, set `isCached = true`, and return cached valuation without throwing a server error. On success, return fresh price with `isCached = false` and update `lastKnownPrice` and `lastFetchedAt` in DynamoDB via `HoldingsRepository.updatePriceCache()`. If fetch fails and no cached price exists, throw a controlled `MarketDataError`.
+* **Impact:** Dashboard remains 100% operational even during third-party price provider outages while isolating provider details from Lambda handlers and frontend clients.
 
 ---
 
