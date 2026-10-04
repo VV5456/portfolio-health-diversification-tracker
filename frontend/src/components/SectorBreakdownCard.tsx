@@ -32,15 +32,15 @@ export const SectorBreakdownCard: React.FC<SectorBreakdownCardProps> = ({
   const sectors = Object.entries(sectorBreakdown || {}).sort((a, b) => b[1] - a[1]);
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div className="flex items-center space-x-2">
-          <div className="p-2 rounded-lg bg-teal-950 text-teal-400 border border-teal-800/50">
+    <div className="bg-slate-900 border border-slate-800/80 rounded-xl p-5 shadow-sm space-y-4">
+      <div className="flex items-center justify-between border-b border-slate-800/60 pb-3">
+        <div className="flex items-center space-x-2.5 min-w-0">
+          <div className="p-2 rounded-lg bg-teal-950/80 text-teal-400 border border-teal-800/60 shrink-0">
             <PieChart className="w-4 h-4" />
           </div>
-          <div>
-            <h2 className="text-base font-bold text-slate-100">Sector Breakdown</h2>
-            <p className="text-xs text-slate-400">Distribution of portfolio value across industry sectors</p>
+          <div className="min-w-0">
+            <h2 className="text-base font-bold text-slate-100 truncate">Sector Breakdown</h2>
+            <p className="text-xs text-slate-400 truncate">Distribution of portfolio value across industry sectors</p>
           </div>
         </div>
       </div>
@@ -49,17 +49,17 @@ export const SectorBreakdownCard: React.FC<SectorBreakdownCardProps> = ({
         <div className="space-y-3 animate-pulse">
           {[1, 2, 3].map((i) => (
             <div key={i} className="space-y-1">
-              <div className="h-4 bg-slate-800 rounded w-1/3"></div>
-              <div className="h-2 bg-slate-800 rounded w-full"></div>
+              <div className="h-4 bg-slate-800/80 rounded w-1/3"></div>
+              <div className="h-2 bg-slate-800/50 rounded w-full"></div>
             </div>
           ))}
         </div>
       ) : sectors.length === 0 ? (
         <p className="text-xs text-slate-500 py-4 text-center">No holdings to compute sector breakdown.</p>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3.5">
           {/* Combined Stacked Distribution Bar */}
-          <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden flex border border-slate-800">
+          <div className="w-full h-3 bg-slate-950/80 rounded-full overflow-hidden flex border border-slate-800/60">
             {sectors.map(([sector, pct], idx) => (
               <div
                 key={sector}
@@ -83,7 +83,7 @@ export const SectorBreakdownCard: React.FC<SectorBreakdownCardProps> = ({
                     </div>
                     <span className="font-mono text-slate-300 font-bold">{pct.toFixed(1)}%</span>
                   </div>
-                  <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800/60">
+                  <div className="w-full h-1.5 bg-slate-950/60 rounded-full overflow-hidden border border-slate-800/40">
                     <div
                       className={`h-full ${color} rounded-full transition-all duration-500`}
                       style={{ width: `${Math.min(Math.max(pct, 0), 100)}%` }}
@@ -98,3 +98,4 @@ export const SectorBreakdownCard: React.FC<SectorBreakdownCardProps> = ({
     </div>
   );
 };
+

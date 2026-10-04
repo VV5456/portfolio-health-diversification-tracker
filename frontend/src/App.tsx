@@ -158,10 +158,24 @@ export const App: React.FC = () => {
         )}
 
         {/* Dashboard & Form Layout Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div className="flex flex-col lg:grid lg:grid-cols-12 gap-6 items-start">
           
-          {/* Left Column: Management Forms */}
-          <div ref={formSectionRef} className="lg:col-span-4 space-y-6">
+          {/* Dashboard Visualization (Mobile: Order 1, Desktop: Right Column order-2 lg:col-span-8) */}
+          <div className="order-1 lg:order-2 lg:col-span-8 w-full space-y-6">
+            <Dashboard
+              analysis={analysis}
+              isLoading={isLoading}
+              onEditHolding={(holding) => {
+                setEditingHolding(holding);
+                handleAddFirstHoldingCTA();
+              }}
+              onDeleteRequest={(symbol) => setDeletingSymbol(symbol)}
+              onAddFirstHolding={handleAddFirstHoldingCTA}
+            />
+          </div>
+
+          {/* Left Column: Management Forms (Mobile: Order 2, Desktop: Left Column order-1 lg:col-span-4) */}
+          <div ref={formSectionRef} className="order-2 lg:order-1 lg:col-span-4 w-full space-y-6">
             <HoldingsForm
               editingHolding={editingHolding}
               onSave={handleSaveHolding}
@@ -177,19 +191,6 @@ export const App: React.FC = () => {
             />
           </div>
 
-          {/* Right Column: Dashboard Visualization */}
-          <div className="lg:col-span-8">
-            <Dashboard
-              analysis={analysis}
-              isLoading={isLoading}
-              onEditHolding={(holding) => {
-                setEditingHolding(holding);
-                handleAddFirstHoldingCTA();
-              }}
-              onDeleteRequest={(symbol) => setDeletingSymbol(symbol)}
-              onAddFirstHolding={handleAddFirstHoldingCTA}
-            />
-          </div>
         </div>
       </main>
 
