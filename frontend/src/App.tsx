@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { api } from './api/client';
-import { PortfolioAnalysis, TargetAllocation, CalculatedHolding } from './types';
+import { PortfolioAnalysis, TargetAllocation, CalculatedHolding, Holding } from './types';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
 import { HoldingsForm } from './components/HoldingsForm';
@@ -9,6 +9,7 @@ import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 
 export const App: React.FC = () => {
+  const [rawHoldings, setRawHoldings] = useState<Holding[]>([]);
   const [analysis, setAnalysis] = useState<PortfolioAnalysis | null>(null);
   const [targets, setTargets] = useState<TargetAllocation[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -19,37 +20,65 @@ export const App: React.FC = () => {
   const [editingHolding, setEditingHolding] = useState<CalculatedHolding | null>(null);
   const [deletingSymbol, setDeletingSymbol] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | undefined>(undefined);
 
   const formSectionRef = useRef<HTMLDivElement>(null);
   const isFetchingRef = useRef<boolean>(false);
 
   /**
-   * Load analysis and target allocation from live backend API
+   * Load raw holdings, target allocation, and analysis from live backend API
    */
-  const loadData = useCallback(async (showLoadingSpinner: boolean = true) => {
-    if (isFetchingRef.current) return;
+  const loadData = useCallback(async (showLoadingSpinner: boolean = true): Promise<boolean> => {
+    if (isFetchingRef.current) return false;
     isFetchingRef.current = true;
 
     if (showLoadingSpinner) setIsLoading(true);
     setErrorMsg(null);
+    setAnalysisError(null);
+
+    let analysisOk = false;
 
     try {
-      const [analysisData, targetsData] = await Promise.all([
-        api.getAnalysis(),
-        api.getTargets().catch(() => []), // Gracefully handle if targets empty
+      // 1. Fetch raw holdings & targets independently
+      const [holdingsRes, targetsRes] = await Promise.all([
+        api.getHoldings().catch((err) => {
+          console.error('getHoldings Error:', err);
+          return null;
+        }),
+        api.getTargets().catch(() => []),
       ]);
 
-      setAnalysis(analysisData);
-      setTargets(targetsData);
-      setLastUpdated(new Date().toISOString());
+      if (holdingsRes !== null) {
+        setRawHoldings(holdingsRes);
+      }
+      if (targetsRes) {
+        setTargets(targetsRes);
+      }
+
+      // 2. Fetch analysis independently
+      try {
+        const analysisData = await api.getAnalysis();
+        setAnalysis(analysisData);
+        setLastUpdated(new Date().toISOString());
+        analysisOk = true;
+      } catch (analysisErr) {
+        console.error('getAnalysis Error:', analysisErr);
+        const msg = analysisErr instanceof Error
+          ? analysisErr.message
+          : 'Portfolio analysis could not be refreshed. Position data is preserved.';
+        setAnalysisError(msg);
+      }
+
+      return analysisOk;
     } catch (err) {
-      console.error('API Load Error:', err);
+      console.error('API Load Failure:', err);
       setErrorMsg(
         err instanceof Error
           ? err.message
           : 'Unable to connect to Portfolio Tracker API. Please check network connection.'
       );
+      return false;
     } finally {
       setIsLoading(false);
       isFetchingRef.current = false;
@@ -61,15 +90,64 @@ export const App: React.FC = () => {
   }, [loadData]);
 
   /**
+   * Derive calculated holdings list by merging rawHoldings with analysis.holdings,
+   * providing fallback calculations if analysis is unavailable.
+   */
+  const effectiveHoldings: CalculatedHolding[] = useMemo(() => {
+    const totalInvested = rawHoldings.reduce((sum, h) => sum + h.quantity * h.avgBuyPrice, 0);
+
+    return rawHoldings.map((h) => {
+      const calcMatch = analysis?.holdings?.find(
+        (ah) => ah.stockSymbol.toUpperCase() === h.stockSymbol.toUpperCase()
+      );
+      if (calcMatch) {
+        return calcMatch;
+      }
+
+      const currentPrice = h.lastKnownPrice ?? h.avgBuyPrice;
+      const investedValue = h.quantity * h.avgBuyPrice;
+      const currentValue = h.quantity * currentPrice;
+      const gainLoss = currentValue - investedValue;
+      const gainLossPercent = investedValue > 0 ? (gainLoss / investedValue) * 100 : 0;
+      const weightPercent = totalInvested > 0 ? (investedValue / totalInvested) * 100 : 0;
+
+      return {
+        ...h,
+        currentPrice,
+        investedValue,
+        currentValue,
+        gainLoss,
+        gainLossPercent,
+        weightPercent,
+        isPriceCached: true,
+      };
+    });
+  }, [rawHoldings, analysis]);
+
+  /**
    * Save (Add or Update) holding callback
    */
-  const handleSaveHolding = async (payload: { stockSymbol: string; quantity: number; avgBuyPrice: number }) => {
+  const handleSaveHolding = async (payload: { stockSymbol: string; quantity: number; avgBuyPrice: number }): Promise<{ saved: boolean; refreshed: boolean }> => {
     setIsSubmittingHolding(true);
     setErrorMsg(null);
+    setAnalysisError(null);
     try {
-      await api.saveHolding(payload);
+      const savedHolding = await api.saveHolding(payload);
+
+      // Instantly update rawHoldings state so holding is retained regardless of analysis outcome
+      setRawHoldings((prev) => {
+        const idx = prev.findIndex((h) => h.stockSymbol.toUpperCase() === savedHolding.stockSymbol.toUpperCase());
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = savedHolding;
+          return updated;
+        }
+        return [...prev, savedHolding];
+      });
+
       setEditingHolding(null);
-      await loadData(false);
+      const refreshed = await loadData(false);
+      return { saved: true, refreshed };
     } catch (err) {
       throw err;
     } finally {
@@ -84,8 +162,10 @@ export const App: React.FC = () => {
     if (!deletingSymbol) return;
     setIsDeletingHolding(true);
     setErrorMsg(null);
+    setAnalysisError(null);
     try {
       await api.deleteHolding(deletingSymbol);
+      setRawHoldings((prev) => prev.filter((h) => h.stockSymbol.toUpperCase() !== deletingSymbol.toUpperCase()));
       setDeletingSymbol(null);
       await loadData(false);
     } catch (err) {
@@ -99,13 +179,15 @@ export const App: React.FC = () => {
   /**
    * Save target allocation callback
    */
-  const handleSaveTargets = async (newTargets: Array<{ category: string; targetPercent: number }>) => {
+  const handleSaveTargets = async (newTargets: Array<{ category: string; targetPercent: number }>): Promise<{ saved: boolean; refreshed: boolean }> => {
     setIsSubmittingTargets(true);
     setErrorMsg(null);
+    setAnalysisError(null);
     try {
       const saved = await api.saveTargets(newTargets);
       setTargets(saved);
-      await loadData(false);
+      const refreshed = await loadData(false);
+      return { saved: true, refreshed };
     } catch (err) {
       throw err;
     } finally {
@@ -131,19 +213,19 @@ export const App: React.FC = () => {
         onRefresh={() => loadData(true)}
         isLoading={isLoading}
         lastUpdated={lastUpdated}
-        holdingCount={analysis?.holdings?.length ?? 0}
+        holdingCount={rawHoldings.length}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         
-        {/* Global Error Banner */}
+        {/* Global Network/API Error Banner */}
         {errorMsg && (
           <div className="bg-rose-950/90 border border-rose-800 text-rose-200 p-4 rounded-xl shadow-lg flex items-start justify-between gap-3 animate-fadeIn">
             <div className="flex items-start space-x-3">
               <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
               <div>
-                <h4 className="text-sm font-bold">API Gateway Error</h4>
+                <h4 className="text-sm font-bold">API Connection Error</h4>
                 <p className="text-xs text-rose-300/90 mt-0.5">{errorMsg}</p>
               </div>
             </div>
@@ -164,6 +246,9 @@ export const App: React.FC = () => {
           <div className="order-1 lg:order-2 lg:col-span-8 w-full space-y-6">
             <Dashboard
               analysis={analysis}
+              effectiveHoldings={effectiveHoldings}
+              rawHoldingsCount={rawHoldings.length}
+              analysisError={analysisError}
               isLoading={isLoading}
               onEditHolding={(holding) => {
                 setEditingHolding(holding);
@@ -171,6 +256,7 @@ export const App: React.FC = () => {
               }}
               onDeleteRequest={(symbol) => setDeletingSymbol(symbol)}
               onAddFirstHolding={handleAddFirstHoldingCTA}
+              onRetryAnalysis={() => loadData(true)}
             />
           </div>
 
@@ -181,6 +267,7 @@ export const App: React.FC = () => {
               onSave={handleSaveHolding}
               onCancelEdit={() => setEditingHolding(null)}
               isSubmitting={isSubmittingHolding}
+              onRefreshAnalysis={() => loadData(true)}
             />
 
             <TargetAllocationForm
@@ -188,6 +275,7 @@ export const App: React.FC = () => {
               targetDrift={analysis?.targetDrift ?? []}
               onSaveTargets={handleSaveTargets}
               isSubmitting={isSubmittingTargets}
+              onRefreshAnalysis={() => loadData(true)}
             />
           </div>
 
@@ -214,3 +302,4 @@ export const App: React.FC = () => {
 };
 
 export default App;
+

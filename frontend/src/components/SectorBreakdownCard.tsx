@@ -1,8 +1,10 @@
 import React from 'react';
 import { PieChart } from 'lucide-react';
+import { CalculatedHolding } from '../types';
 
 interface SectorBreakdownCardProps {
-  sectorBreakdown: Record<string, number>;
+  sectorBreakdown?: Record<string, number>;
+  effectiveHoldings?: CalculatedHolding[];
   isLoading: boolean;
 }
 
@@ -27,9 +29,24 @@ const getSectorColor = (sector: string, index: number): string => {
 
 export const SectorBreakdownCard: React.FC<SectorBreakdownCardProps> = ({
   sectorBreakdown,
+  effectiveHoldings = [],
   isLoading,
 }) => {
-  const sectors = Object.entries(sectorBreakdown || {}).sort((a, b) => b[1] - a[1]);
+  let displayBreakdown: Record<string, number> = sectorBreakdown || {};
+
+  if ((!sectorBreakdown || Object.keys(sectorBreakdown).length === 0) && effectiveHoldings.length > 0) {
+    const totalVal = effectiveHoldings.reduce((sum, h) => sum + h.currentValue, 0);
+    const breakdown: Record<string, number> = {};
+    if (totalVal > 0) {
+      for (const h of effectiveHoldings) {
+        const sec = h.sector?.trim() || 'Unassigned';
+        breakdown[sec] = (breakdown[sec] || 0) + (h.currentValue / totalVal) * 100;
+      }
+    }
+    displayBreakdown = breakdown;
+  }
+
+  const sectors = Object.entries(displayBreakdown).sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="bg-slate-900 border border-slate-800/80 rounded-xl p-5 shadow-sm space-y-4">
@@ -98,4 +115,5 @@ export const SectorBreakdownCard: React.FC<SectorBreakdownCardProps> = ({
     </div>
   );
 };
+
 

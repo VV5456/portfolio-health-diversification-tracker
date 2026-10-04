@@ -1,15 +1,16 @@
 import React from 'react';
 import { TrendingUp, TrendingDown, Wallet, PiggyBank, PieChart, ShieldAlert } from 'lucide-react';
-import { PortfolioAnalysis } from '../types';
+import { PortfolioAnalysis, CalculatedHolding } from '../types';
 import { formatCurrency, formatPercent } from '../utils/formatters';
 
 interface OverviewCardsProps {
   analysis: PortfolioAnalysis | null;
+  effectiveHoldings?: CalculatedHolding[];
   isLoading: boolean;
 }
 
-export const OverviewCards: React.FC<OverviewCardsProps> = ({ analysis, isLoading }) => {
-  if (isLoading && !analysis) {
+export const OverviewCards: React.FC<OverviewCardsProps> = ({ analysis, effectiveHoldings = [], isLoading }) => {
+  if (isLoading && !analysis && effectiveHoldings.length === 0) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-pulse">
         {[1, 2, 3, 4].map((i) => (
@@ -23,16 +24,34 @@ export const OverviewCards: React.FC<OverviewCardsProps> = ({ analysis, isLoadin
     );
   }
 
-  const totalValue = analysis?.totalValue ?? 0;
-  const totalInvested = analysis?.totalInvested ?? 0;
-  const totalGainLoss = analysis?.totalGainLoss ?? 0;
-  const gainLossPercent = analysis?.gainLossPercent ?? 0;
+  // Calculate fallbacks from effectiveHoldings if analysis is null
+  const calcTotalInvested = effectiveHoldings.reduce((sum, h) => sum + h.investedValue, 0);
+  const calcTotalValue = effectiveHoldings.reduce((sum, h) => sum + h.currentValue, 0);
+  const calcTotalGainLoss = calcTotalValue - calcTotalInvested;
+  const calcGainLossPercent = calcTotalInvested > 0 ? (calcTotalGainLoss / calcTotalInvested) * 100 : 0;
+
+  const totalValue = analysis ? analysis.totalValue : calcTotalValue;
+  const totalInvested = analysis ? analysis.totalInvested : calcTotalInvested;
+  const totalGainLoss = analysis ? analysis.totalGainLoss : calcTotalGainLoss;
+  const gainLossPercent = analysis ? analysis.gainLossPercent : calcGainLossPercent;
   const isPositive = totalGainLoss >= 0;
 
-  const flag = analysis?.concentration?.flag ?? 'low';
-  const top1Percent = analysis?.concentration?.top1Percent ?? 0;
-  const top3Percent = analysis?.concentration?.top3Percent ?? 0;
-  const top1Symbol = analysis?.concentration?.top1Symbol;
+  // Concentration fallback calculation
+  let flag = analysis?.concentration?.flag ?? 'low';
+  let top1Percent = analysis?.concentration?.top1Percent ?? 0;
+  let top3Percent = analysis?.concentration?.top3Percent ?? 0;
+  let top1Symbol = analysis?.concentration?.top1Symbol;
+
+  if (!analysis && effectiveHoldings.length > 0) {
+    const sorted = [...effectiveHoldings].sort((a, b) => b.currentValue - a.currentValue);
+    const totalVal = calcTotalValue > 0 ? calcTotalValue : calcTotalInvested;
+    if (totalVal > 0) {
+      top1Percent = (sorted[0].currentValue / totalVal) * 100;
+      top3Percent = (sorted.slice(0, 3).reduce((sum, h) => sum + h.currentValue, 0) / totalVal) * 100;
+      top1Symbol = sorted[0].stockSymbol;
+      flag = top1Percent > 40 ? 'high' : top1Percent > 25 ? 'moderate' : 'low';
+    }
+  }
 
   const flagBadgeColor =
     flag === 'high'
@@ -54,7 +73,9 @@ export const OverviewCards: React.FC<OverviewCardsProps> = ({ analysis, isLoadin
         <div className="mt-2 text-2xl font-bold text-white tracking-tight font-mono truncate">
           {formatCurrency(totalValue)}
         </div>
-        <p className="mt-1 text-xs text-slate-400 truncate">Current market value of positions</p>
+        <p className="mt-1 text-xs text-slate-400 truncate">
+          {!analysis ? 'Cost basis / price estimate' : 'Current market value of positions'}
+        </p>
       </div>
 
       {/* 2. Total Invested */}
@@ -127,4 +148,5 @@ export const OverviewCards: React.FC<OverviewCardsProps> = ({ analysis, isLoadin
     </div>
   );
 };
+
 

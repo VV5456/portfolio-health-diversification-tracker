@@ -1,12 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { PlusCircle, Edit3, X, Loader2, CheckCircle2, AlertCircle, Info } from 'lucide-react';
+import { PlusCircle, Edit3, X, Loader2, CheckCircle2, AlertCircle, AlertTriangle, RefreshCw, Info } from 'lucide-react';
 import { CalculatedHolding, Holding } from '../types';
+
+export interface SaveHoldingResult {
+  saved: boolean;
+  refreshed: boolean;
+}
 
 interface HoldingsFormProps {
   editingHolding: CalculatedHolding | Holding | null;
-  onSave: (data: { stockSymbol: string; quantity: number; avgBuyPrice: number }) => Promise<void>;
+  onSave: (data: { stockSymbol: string; quantity: number; avgBuyPrice: number }) => Promise<SaveHoldingResult | void>;
   onCancelEdit: () => void;
   isSubmitting: boolean;
+  onRefreshAnalysis?: () => void;
 }
 
 export const HoldingsForm: React.FC<HoldingsFormProps> = ({
@@ -14,12 +20,14 @@ export const HoldingsForm: React.FC<HoldingsFormProps> = ({
   onSave,
   onCancelEdit,
   isSubmitting,
+  onRefreshAnalysis,
 }) => {
   const [stockSymbol, setStockSymbol] = useState('');
   const [quantity, setQuantity] = useState('');
   const [avgBuyPrice, setAvgBuyPrice] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [warningMsg, setWarningMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (editingHolding) {
@@ -27,6 +35,8 @@ export const HoldingsForm: React.FC<HoldingsFormProps> = ({
       setQuantity(editingHolding.quantity.toString());
       setAvgBuyPrice(editingHolding.avgBuyPrice.toString());
       setValidationError(null);
+      setSuccessMsg(null);
+      setWarningMsg(null);
     } else {
       setStockSymbol('');
       setQuantity('');
@@ -38,6 +48,7 @@ export const HoldingsForm: React.FC<HoldingsFormProps> = ({
     e.preventDefault();
     setValidationError(null);
     setSuccessMsg(null);
+    setWarningMsg(null);
 
     const cleanSymbol = stockSymbol.trim().toUpperCase();
     const parsedQty = parseFloat(quantity);
@@ -57,18 +68,26 @@ export const HoldingsForm: React.FC<HoldingsFormProps> = ({
     }
 
     try {
-      await onSave({
+      const result = await onSave({
         stockSymbol: cleanSymbol,
         quantity: parsedQty,
         avgBuyPrice: parsedPrice,
       });
-      setSuccessMsg(`Position for ${cleanSymbol} ${editingHolding ? 'updated' : 'added'} successfully!`);
-      if (!editingHolding) {
+
+      const wasEditing = !!editingHolding;
+
+      if (!wasEditing) {
         setStockSymbol('');
         setQuantity('');
         setAvgBuyPrice('');
       }
-      setTimeout(() => setSuccessMsg(null), 4000);
+
+      if (result && result.refreshed === false) {
+        setWarningMsg(`Position ${wasEditing ? 'updated' : 'saved'} for ${cleanSymbol}, but portfolio analysis could not be refreshed.`);
+      } else {
+        setSuccessMsg(`Position for ${cleanSymbol} ${wasEditing ? 'updated' : 'added'} successfully!`);
+        setTimeout(() => setSuccessMsg(null), 4000);
+      }
     } catch (err) {
       setValidationError(err instanceof Error ? err.message : 'Failed to save holding.');
     }
@@ -104,6 +123,25 @@ export const HoldingsForm: React.FC<HoldingsFormProps> = ({
         <div className="p-3 rounded-lg bg-rose-950/90 border border-rose-800/80 text-rose-300 text-xs flex items-start gap-2 animate-fadeIn">
           <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
           <span>{validationError}</span>
+        </div>
+      )}
+
+      {warningMsg && (
+        <div className="p-3 rounded-lg bg-amber-950/90 border border-amber-800/80 text-amber-200 text-xs flex items-center justify-between gap-2 animate-fadeIn">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="truncate">{warningMsg}</span>
+          </div>
+          {onRefreshAnalysis && (
+            <button
+              type="button"
+              onClick={onRefreshAnalysis}
+              className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-900 hover:bg-amber-800 text-amber-100 text-[11px] font-semibold rounded-md transition-colors shrink-0"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Retry
+            </button>
+          )}
         </div>
       )}
 

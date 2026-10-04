@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Target, Plus, Trash2, Save, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Target, Plus, Trash2, Save, Loader2, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
 import { TargetAllocation, TargetDriftItem } from '../types';
 
 interface TargetAllocationFormProps {
   targets: TargetAllocation[];
   targetDrift: TargetDriftItem[];
-  onSaveTargets: (targets: Array<{ category: string; targetPercent: number }>) => Promise<void>;
+  onSaveTargets: (targets: Array<{ category: string; targetPercent: number }>) => Promise<{ saved: boolean; refreshed: boolean } | void>;
   isSubmitting: boolean;
+  onRefreshAnalysis?: () => void;
 }
 
 export const TargetAllocationForm: React.FC<TargetAllocationFormProps> = ({
@@ -14,10 +15,12 @@ export const TargetAllocationForm: React.FC<TargetAllocationFormProps> = ({
   targetDrift,
   onSaveTargets,
   isSubmitting,
+  onRefreshAnalysis,
 }) => {
   const [rows, setRows] = useState<Array<{ category: string; targetPercent: string }>>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [warningMsg, setWarningMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (targets && targets.length > 0) {
@@ -52,6 +55,7 @@ export const TargetAllocationForm: React.FC<TargetAllocationFormProps> = ({
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
+    setWarningMsg(null);
 
     if (rows.length === 0) {
       setErrorMsg('Please add at least one target allocation category.');
@@ -75,9 +79,13 @@ export const TargetAllocationForm: React.FC<TargetAllocationFormProps> = ({
     }
 
     try {
-      await onSaveTargets(payload);
-      setSuccessMsg('Target allocations updated successfully!');
-      setTimeout(() => setSuccessMsg(null), 4000);
+      const result = await onSaveTargets(payload);
+      if (result && result.refreshed === false) {
+        setWarningMsg('Target allocations saved, but portfolio analysis could not be refreshed.');
+      } else {
+        setSuccessMsg('Target allocations updated successfully!');
+        setTimeout(() => setSuccessMsg(null), 4000);
+      }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to update target allocation.');
     }
@@ -105,6 +113,25 @@ export const TargetAllocationForm: React.FC<TargetAllocationFormProps> = ({
         <div className="p-3 rounded-lg bg-rose-950/90 border border-rose-800/80 text-rose-300 text-xs flex items-center gap-2 animate-fadeIn">
           <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
           <span>{errorMsg}</span>
+        </div>
+      )}
+
+      {warningMsg && (
+        <div className="p-3 rounded-lg bg-amber-950/90 border border-amber-800/80 text-amber-200 text-xs flex items-center justify-between gap-2 animate-fadeIn">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="truncate">{warningMsg}</span>
+          </div>
+          {onRefreshAnalysis && (
+            <button
+              type="button"
+              onClick={onRefreshAnalysis}
+              className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-900 hover:bg-amber-800 text-amber-100 text-[11px] font-semibold rounded-md transition-colors shrink-0"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Retry
+            </button>
+          )}
         </div>
       )}
 

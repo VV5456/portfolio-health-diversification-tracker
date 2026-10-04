@@ -1,14 +1,19 @@
 import React from 'react';
 import { ShieldAlert, AlertTriangle, CheckCircle, Info } from 'lucide-react';
-import { ConcentrationInfo } from '../types';
+import { ConcentrationInfo, CalculatedHolding } from '../types';
 
 interface ConcentrationCardProps {
   concentration?: ConcentrationInfo;
+  effectiveHoldings?: CalculatedHolding[];
   isLoading: boolean;
 }
 
-export const ConcentrationCard: React.FC<ConcentrationCardProps> = ({ concentration, isLoading }) => {
-  if (isLoading && !concentration) {
+export const ConcentrationCard: React.FC<ConcentrationCardProps> = ({
+  concentration,
+  effectiveHoldings = [],
+  isLoading,
+}) => {
+  if (isLoading && !concentration && effectiveHoldings.length === 0) {
     return (
       <div className="bg-slate-900 border border-slate-800/80 rounded-xl p-5 space-y-3 animate-pulse">
         <div className="h-4 bg-slate-800/80 rounded w-1/3"></div>
@@ -17,11 +22,23 @@ export const ConcentrationCard: React.FC<ConcentrationCardProps> = ({ concentrat
     );
   }
 
-  const top1 = concentration?.top1Percent ?? 0;
-  const top3 = concentration?.top3Percent ?? 0;
-  const top1Symbol = concentration?.top1Symbol ?? 'N/A';
-  const flag = concentration?.flag ?? 'low';
-  const flagReason = concentration?.flagReason ?? 'Concentration risk analysis';
+  let top1 = concentration?.top1Percent ?? 0;
+  let top3 = concentration?.top3Percent ?? 0;
+  let top1Symbol = concentration?.top1Symbol ?? 'N/A';
+  let flag: 'high' | 'moderate' | 'low' = concentration?.flag ?? 'low';
+  let flagReason = concentration?.flagReason ?? 'Concentration risk analysis based on position weights.';
+
+  if (!concentration && effectiveHoldings.length > 0) {
+    const totalVal = effectiveHoldings.reduce((sum, h) => sum + h.currentValue, 0);
+    const sorted = [...effectiveHoldings].sort((a, b) => b.currentValue - a.currentValue);
+    if (totalVal > 0) {
+      top1 = (sorted[0].currentValue / totalVal) * 100;
+      top3 = (sorted.slice(0, 3).reduce((sum, h) => sum + h.currentValue, 0) / totalVal) * 100;
+      top1Symbol = sorted[0].stockSymbol;
+      flag = top1 > 40 ? 'high' : top1 > 25 ? 'moderate' : 'low';
+      flagReason = `Largest position (${top1Symbol}) accounts for ${top1.toFixed(1)}% of portfolio value.`;
+    }
+  }
 
   const flagStyles =
     flag === 'high'
@@ -85,4 +102,5 @@ export const ConcentrationCard: React.FC<ConcentrationCardProps> = ({ concentrat
     </div>
   );
 };
+
 
