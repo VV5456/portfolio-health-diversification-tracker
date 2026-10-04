@@ -168,6 +168,10 @@ Resources:
         - Statement:
             - Effect: Allow
               Action:
+                - dynamodb:UpdateItem
+              Resource: !GetAtt HoldingsTable.Arn
+            - Effect: Allow
+              Action:
                 - bedrock:InvokeModel
               Resource: "*"
       Events:
@@ -188,6 +192,11 @@ Resources:
             TableName: !Ref HoldingsTable
         - DynamoDBReadPolicy:
             TableName: !Ref TargetAllocationTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+              Resource: !GetAtt HoldingsTable.Arn
       Events:
         WeeklyCron:
           Type: Schedule

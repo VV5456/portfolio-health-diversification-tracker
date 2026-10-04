@@ -1,0 +1,14 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "portfolio-tracker-stack"
+resolve_s3 = true
+s3_prefix = "portfolio-tracker-stack"
+region = "ap-south-1"
+profile = "portfolio-tracker"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
+
+[default.global.parameters]
+region = "ap-south-1"

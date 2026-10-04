@@ -53,3 +53,11 @@ export interface PortfolioAnalysis {
   targetDrift: TargetDriftItem[];
   aiSummary: string;
 }
+
+export interface ApiErrorResponse {
+  error: {
+    code: string;
+    message: string;
+    details?: Array<{ field?: string; issue?: string }>;
+  };
+}

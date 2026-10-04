@@ -1,10 +1,63 @@
 import React from 'react';
+import { PortfolioAnalysis, CalculatedHolding } from '../types';
+import { OverviewCards } from './OverviewCards';
+import { AiSummaryCard } from './AiSummaryCard';
+import { HoldingsList } from './HoldingsList';
+import { SectorBreakdownCard } from './SectorBreakdownCard';
+import { ConcentrationCard } from './ConcentrationCard';
+import { EmptyState } from './EmptyState';
 
-export const Dashboard: React.FC = () => {
+interface DashboardProps {
+  analysis: PortfolioAnalysis | null;
+  isLoading: boolean;
+  onEditHolding: (holding: CalculatedHolding) => void;
+  onDeleteRequest: (symbol: string) => void;
+  onAddFirstHolding: () => void;
+}
+
+export const Dashboard: React.FC<DashboardProps> = ({
+  analysis,
+  isLoading,
+  onEditHolding,
+  onDeleteRequest,
+  onAddFirstHolding,
+}) => {
+  const holdings = analysis?.holdings ?? [];
+  const isEmpty = !isLoading && holdings.length === 0;
+
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-md">
-      <h2 className="text-xl font-semibold text-slate-100 mb-4">Portfolio Dashboard</h2>
-      <p className="text-slate-400 text-sm">Dashboard scaffold for valuation, concentration risk, and AI explanation (TASK 9 UI implementation).</p>
+    <div className="space-y-6">
+      {/* Overview Metric Cards */}
+      <OverviewCards analysis={analysis} isLoading={isLoading} />
+
+      {isEmpty ? (
+        <EmptyState onAddFirstHolding={onAddFirstHolding} />
+      ) : (
+        <>
+          {/* AI Explanation Summary */}
+          <AiSummaryCard aiSummary={analysis?.aiSummary} isLoading={isLoading} />
+
+          {/* Main Holdings Table */}
+          <HoldingsList
+            holdings={holdings}
+            onEdit={onEditHolding}
+            onDeleteRequest={onDeleteRequest}
+            isLoading={isLoading}
+          />
+
+          {/* Sector & Concentration Analysis Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <SectorBreakdownCard
+              sectorBreakdown={analysis?.sectorBreakdown ?? {}}
+              isLoading={isLoading}
+            />
+            <ConcentrationCard
+              concentration={analysis?.concentration}
+              isLoading={isLoading}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 };
